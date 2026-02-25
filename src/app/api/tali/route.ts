@@ -6,21 +6,18 @@ function json(data: unknown, status = 200) {
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
     },
   });
 }
 
 export async function OPTIONS() {
-  return new Response(null, {
-    status: 200,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    },
-  });
+  return json({}, 200);
+}
+
+export async function GET() {
+  return new Response("ok", { status: 200 });
 }
 
 export async function POST(req: Request) {
@@ -30,20 +27,17 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const language = body.language ?? "en";
-    const methodology = body.methodology ?? "mixed";
-    const modes = body.modes ?? { calm: false, focus: false };
-    const childAgeBand = body.childAgeBand ?? "7-8";
-    const userMessage = String(body.userMessage ?? "");
+    const message = String(body.message ?? body.userMessage ?? "").trim();
 
-    if (!userMessage.trim()) return json({ error: "userMessage is required" }, 400);
-    if (userMessage.length > 500) return json({ error: "userMessage too long" }, 400);
+    if (!message) return json({ error: "message is required" }, 400);
 
     const system = [
-      "You are Tali, a friendly learning buddy for kids aged 5–8.",
+      "You are Tali, a friendly learning companion for kids age 5-8.",
       `Reply in ${language}.`,
-      "Use 1–2 short sentences.",
-      "Never give the exact final answer. Give a hint or a guiding question.",
-      `Methodology: ${methodology}. Calm: ${!!modes.calm}. Focus: ${!!modes.focus}. Age: ${childAgeBand}.`,
+      "Use only 1-2 short sentences.",
+      "Never give the exact final answer.",
+      "Give a hint or a guiding question.",
+      "Be warm and encouraging."
     ].join(" ");
 
     const r = await fetch("https://api.deepseek.com/v1/chat/completions", {
@@ -56,7 +50,7 @@ export async function POST(req: Request) {
         model: "deepseek-chat",
         messages: [
           { role: "system", content: system },
-          { role: "user", content: userMessage },
+          { role: "user", content: message },
         ],
         temperature: 0.7,
         max_tokens: 120,
@@ -64,10 +58,13 @@ export async function POST(req: Request) {
     });
 
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) return json({ error: "DeepSeek error", status: r.status, details: data }, r.status);
 
-    const reply = data?.choices?.[0]?.message?.content?.trim() || "…";
-    return json({ reply }, 200);
+    if (!r.ok) {
+      return json({ error: "DeepSeek error", details: data }, r.status);
+    }
+
+    const reply = data?.choices?.[0]?.message?.content?.trim() || "Let's try one small step together.";
+    return json({ reply });
   } catch (e: any) {
     return json({ error: "Server error", details: String(e?.message || e) }, 500);
   }
